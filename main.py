@@ -3,6 +3,7 @@ import math
 import numpy as np
 from scipy.optimize import minimize
 
+from utils import get_uniform_random_unit_vector
 
 N_S = 10  # buffer size
 K = 50
@@ -22,9 +23,9 @@ B = []  # [{x, F(x), A}]
 # X = [0, 1]^D is the design space
 
 
-def design_constraints(x):
-    g1 = x-1
-    g2 = -x
+def design_constraints(x):  # TODO check this
+    g1 = -x
+    g2 = x-1
 
     return np.array([g1, g2])
 
@@ -63,18 +64,19 @@ def F_gradient(x):
     f1_grad[0] = 1
 
     p = get_p(x)
-    p_grad = np.full((x.shape), 9/D-1)
+    p_grad = np.full((x.shape), 9/(D-1))
     p_grad[0] = 0
 
-    f2_grad = p_grad + (p_grad * f1 + f1_grad * p) / 2 * math.sqrt(p * f1)
+    f2_grad = p_grad + ((p_grad * f1 + f1_grad * p) / (2 * math.sqrt(p * f1)))
 
     return f1_grad, f2_grad
 
 
 def get_A_mtx(x):
     f1_grad, f2_grad = F_gradient(x)
-    g1_grad, g2_grad = constraints_gradient(x)
-    return np.array([f1_grad - f2_grad, g1_grad, g2_grad])
+    # g1_grad, g2_grad = constraints_gradient(x)
+    # return np.array([f1_grad - f2_grad, g1_grad, g2_grad])
+    return np.array([f1_grad - f2_grad])
 
 
 def get_b_mtx(x):
@@ -88,6 +90,10 @@ def handle_err(A, y, b):
         raise Exception('error is not close to 0')
 
 
+def kk_solver_func(y, A, b):
+    return np.linalg.norm(b - np.dot(A.T, y)) / np.linalg.norm(b)
+
+
 def get_y_mtx(A, b):
     n, p = A.shape
     if n > p:
@@ -95,8 +101,13 @@ def get_y_mtx(A, b):
         handle_err(A, y_bar, b)
         return y_bar
     elif n < p:
-        # TODO implement it
-        return None
+        bounds = np.c_[np.full(n, 0), np.full(n, 1)]
+        y_init = np.random.rand(n, 1)
+        # TODO add constraints
+        sol = minimize(kk_solver_func, y_init, args=(A, b), bounds=bounds, method='SLSQP')
+        if not sol.success:
+            raise RuntimeError("Failed to solve")
+        return sol.x
     else:
         y_bar = np.dot(np.linalg.inv(A), b)
         handle_err(A, y_bar, b)
@@ -109,12 +120,6 @@ def _select_min_sample(buffer_cell):
     x_j = random.choice(min_xs)['x']
 
     return x_j
-
-
-def get_uniform_random_unit_vector(d):
-    v = np.random.rand(d)
-    v_hat = v / np.linalg.norm(v)
-    return v_hat
 
 
 def stochastic_sampling(B):
@@ -168,7 +173,10 @@ def local_optimization(x_s):
 
 
 def first_order_optimization(x_o):
-    pass
+    A = get_A_mtx(x_o)
+    b = get_A_mtx(x_o)
+    y = get_y_mtx(A, b)
+    return y[:d-1]
 
 
 def update_buffer():
@@ -180,4 +188,4 @@ def main():
         xs = stochastic_sampling(B)
         for x_s in xs:
             x_o = local_optimization(x_s)
-            first_order_optimization(x_o)
+            M = first_order_optimization(x_o)  # it should be D*d-1 matrix
