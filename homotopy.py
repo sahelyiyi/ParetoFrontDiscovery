@@ -84,6 +84,19 @@ def g_alpha_func(x, alpha):
     return np.sum(alpha * f)
 
 
+def minimize_g_alpha(alpha):
+    init_x = np.zeros(N)
+    bounds = np.c_[np.full(N, 0), np.full(N, 1)]
+    sol = minimize(g_alpha_func, init_x, args=(alpha), bounds=bounds, method='Nelder-Mead')
+    if not sol.success:
+        raise RuntimeError("Failed to solve")
+    return sol.x
+
+
+def F_func(x, alpha):
+    return np.concatenate((alpha * f_func(x), np.array([np.sum(alpha)-1])))
+
+
 def hessian_of_the_lagrangian_func(x, alpha):
     grad2_f = grad2_f_func(x)
     return np.array([alpha[i] * grad2_f[i] for i in range(len(alpha))])
@@ -99,13 +112,37 @@ def F_jacobian_func(x, alpha):
     return np.concatenate((hess_concat, grad_f_concat), axis=0)
 
 
-def minimize_g_alpha(alpha):
-    init_x = np.zeros(N)
-    bounds = np.c_[np.full(N, 0), np.full(N, 1)]
-    sol = minimize(g_alpha_func, init_x, args=(alpha), bounds=bounds, method='Nelder-Mead')
-    if not sol.success:
-        raise RuntimeError("Failed to solve")
-    return sol.x
+def phi_func(Q, param, x_star, alpha_star):
+    res = np.dot(Q, param)
+    res += np.concatenate((x_star, alpha_star))
+    return res
+
+
+def F_tilda_func(Q, param, x_star, alpha_star):
+    res = phi_func(Q, param, x_star, alpha_star)
+    x = res[:N]
+    alpha = res[N:]
+    return F_func(x, alpha)
+
+
+def grad_F_tilda_func(Q, param, x_star, alpha_star):
+    return np.dot(F_jacobian_func(x_star, alpha_star).T, Q)
+
+
+def newton(f, Df, Q, param0, x_star, alpha_star, error=1e-2, max_iter=100):  # TODO fix epsilon and max_iter
+    param_n = param0
+    for n in range(max_iter):
+        fn = f(Q, param_n, x_star, alpha_star)
+        if fn[abs(fn) < error].shape == fn.shape:
+            # print('Found solution after', n, 'iterations.')
+            return param_n
+        Dfn = Df(Q, param_n, x_star, alpha_star)
+        if len(Dfn[Dfn == 0]):
+            # print('Zero derivative. No solution found.')
+            return None
+        param_n = param_n - fn/Dfn
+    # print('Exceeded maximum iterations. No solution found.')
+    return None
 
 
 def run():
@@ -124,11 +161,44 @@ def run():
     s = 1e-10
     for j in range(len(R1)):
         if R1[j, j] < s:
+            print('failed in checking R1')
             run()
 
     # Step 5
     Q_tilda_1 = Q_tilda[:, :N+M+1]
     Q_tilda_2 = Q_tilda[:, -(K-1):]
     Q = np.concatenate((Q_tilda_2, Q_tilda_1), axis=1)
-    
+
     # Step 6
+    I_size = K-1
+    c = 1.0
+    result_points = []
+    for i in range(I_size):
+        e_i = np.zeros(I_size)
+        e_i[i] = 1
+        q_i_bar = Q[:N, i]
+        lambda_i = c / np.linalg.norm(grad_f_func(x) * q_i_bar)
+        ebsilon_i = lambda_i * e_i
+
+        # Step 8
+        # phi_p = np.concatenate((x, alpha)) + np.dot(Q[:, :K - 1], ebsilon_i)
+
+        # Step 10
+        check_phi_alpha = False
+        res_param = None
+        while not check_phi_alpha:
+            # Step 9
+            res_param = None
+            while res_param is None:
+
+                # Step 8
+                param0 = np.dot(Q[:, :K - 1], ebsilon_i)
+                res_param = newton(F_tilda_func, grad_F_tilda_func, Q, param0, x, alpha, error=0.01, max_iter=100)
+                ebsilon_i /= 2
+
+            phi_alpha = res_param[:N]
+            check_phi_alpha = True if len(phi_alpha[phi_alpha <= 0]) else False
+
+        result_points.append(phi_func(Q, res_param, x, alpha))
+
+    return np.array(result_points)
