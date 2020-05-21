@@ -3,7 +3,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 from utils import get_uniform_positive_random_unit_vector
-from QR_factorization import qr_decomposition
+from QR_factorization import qr_factorization
 
 
 A_C = 45
@@ -160,7 +160,7 @@ def run():
     F_jacobian = F_jacobian_func(x, alpha)
 
     # Step 3
-    Q_tilda, R = qr_decomposition(F_jacobian)
+    Q_tilda, R = qr_factorization(F_jacobian)
     R1 = R[:N+M+1, :]
 
     # Step 4
