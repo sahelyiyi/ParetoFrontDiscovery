@@ -3,6 +3,7 @@ import math
 import numpy as np
 from scipy.optimize import minimize
 
+from homotopy import run_homotopy
 from utils import get_uniform_random_unit_vector
 
 N_S = 10  # buffer size
@@ -13,8 +14,8 @@ LAMBDA_B = 1e-2
 LAMBDA_I = 1e-4
 LAMBDA_N = 0.2 * N_S
 
-D = 3
-d = 2
+D = 3  # dimension of X
+d = 2  # dimension of F
 
 BOUNDS = np.c_[np.full(D, 0), np.full(D, 1)]
 
@@ -23,64 +24,148 @@ B = []  # [{x, F(x), A}]
 # X = [0, 1]^D is the design space
 
 
-def design_constraints(x):  # TODO check this
+def constraints_func(x):  # TODO check this
     g1 = -x
     g2 = x-1
 
     return np.array([g1, g2])
 
 
-def constraints_gradient(x):
+def grad_constraints_func(x):
     g1_grad = np.full((x.shape), -1)
     g2_grad = np.full((x.shape), 1)
     return g1_grad, g2_grad
 
 
-def get_p(x):
-    return 1 + 9 * np.sum(x[1:D] / (D - 1))
+def p_func(x):
+    shape = x.shape[0]
+    return 1 + 9 * np.sum(x[1:shape] / (shape - 1))
 
 
-def get_f1(x):
+def grad_p_func(x):
+    shape = x.shape[0]
+    grad_p = np.full((shape), 9 / (shape - 1))
+    grad_p[0] = 0
+    return grad_p
+
+
+def grad2_p_func(x):
+    return np.zeros(x.shape)
+
+
+def f1_func(x):
     return x[0]
 
 
-def ZDT1(x):
-    f1 = get_f1(x)  # objective 1
-    p = get_p(x)
+def grad_f1_func(x):
+    grad_f1 = np.zeros((x.shape))
+    grad_f1[0] = 1
+    return grad_f1
+
+
+def grad2_f1_func(x):
+    return np.zeros((x.shape))
+
+
+def grad_pf1_func(x):
+    f1 = f1_func(x)
+    grad_f1 = grad_f1_func(x)
+
+    p = p_func(x)
+    grad_p = grad_p_func(x)
+
+    return grad_p * f1 + grad_f1 * p
+
+
+def grad2_pf1_func(x):
+    f1 = f1_func(x)
+    grad_f1 = grad_f1_func(x)
+    grad2_f1 = grad2_f1_func(x)
+
+    p = p_func(x)
+    grad_p = grad_p_func(x)
+    grad2_p = grad2_p_func(x)
+    return grad2_p * f1 + 2 * grad_p * grad_f1 + grad2_f1 * p
+
+
+def grad_pf1sqrt(x):
+    f1 = f1_func(x)
+    p = p_func(x)
+
+    return grad_pf1_func(x) / (2 * math.sqrt(p * f1))
+
+
+def grad2_pf1sqrt(x):
+    f1 = f1_func(x)
+    p = p_func(x)
+
+    return (grad2_pf1_func(x) * math.sqrt(p * f1) - grad_pf1_func(x) * grad_pf1sqrt(x)) / (2 * p * f1)
+
+
+def f2_func(x):
+    f1 = f1_func(x)
+    p = p_func(x)
     q = 1 - np.sqrt(f1 / p)
-    f2 = p * q  # objective 2
+    f2 = p * q
+    return f2
+
+
+def grad_f2_func(x):
+    return grad_p_func(x) + grad_pf1sqrt(x)
+
+
+def grad2_f2_func(x):
+    return grad2_p_func(x) + grad2_pf1sqrt(x)
+
+
+def ZDT1(x):
+    f1 = f1_func(x)  # objective 1
+    f2 = f2_func(x)  # objective 2
     # f2 /= 10.0  # to scale the F
 
     return np.array([f1, f2])
 
 
-def F(x):
+def f_func(x):
     return ZDT1(x)
 
 
-def F_gradient(x):
-    f1 = get_f1(x)
-    f1_grad = np.zeros((x.shape))
-    f1_grad[0] = 1
+def grad_f_func(x):
+    grad_f1 = grad_f1_func(x)
+    grad_f2 = grad_f2_func(x)
+    return np.array([grad_f1, grad_f2])
 
-    p = get_p(x)
-    p_grad = np.full((x.shape), 9/(D-1))
-    p_grad[0] = 0
 
-    f2_grad = p_grad + ((p_grad * f1 + f1_grad * p) / (2 * math.sqrt(p * f1)))
+def grad2_f_func(x):
+    grad2_f1 = grad2_f1_func(x)
+    grad2_f2 = grad2_f2_func(x)
+    return np.array([grad2_f1, grad2_f2])
 
-    return f1_grad, f2_grad
+
+def g_alpha_func(alpha, x, _f_func):
+    f = _f_func(x)
+    return np.sum(alpha * f)
+
+
+def minimize_g_alpha(x, _f_func):
+    init_alpha = np.zeros(d)
+    bounds = np.c_[np.full(d, 0), np.full(d, 1)]
+    cons = ({'type': 'eq', 'fun': lambda x: x[0] + x[1] - 1})
+    sol = minimize(g_alpha_func, init_alpha, args=(x, _f_func), bounds=bounds, constraints=cons, method='SLSQP')
+    if not sol.success:
+        raise RuntimeError("Failed to solve")
+    return sol.x
 
 
 def get_A_mtx(x):
-    f1_grad, f2_grad = F_gradient(x)
+    f1_grad, f2_grad = grad_f_func(x)
     # g1_grad, g2_grad = constraints_gradient(x)
     # return np.array([f1_grad - f2_grad, g1_grad, g2_grad])
     return np.array([f1_grad - f2_grad])
 
 
 def get_b_mtx(x):
-    _, f2_grad = F_gradient(x)
+    _, f2_grad = grad_f_func(x)
     return -f2_grad
 
 
@@ -126,7 +211,7 @@ def stochastic_sampling(B):
     # uniformely select N_s buffer cells
     xs = []
     for j in range(N_S):
-        if len(B[j]) == 0:
+        if len(B) <= j or len(B[j]) == 0:
             x_j = np.random.rand(D)
 
         else:
@@ -152,7 +237,7 @@ def calculate_s(x_s):  # select random point within lambda_N dist (search direct
 
 
 def calculate_z(x_s):
-    return F(x_s) + calculate_s(x_s) * calculate_C(x_s)  # d dimensions the same as F(x)
+    return f_func(x_s) + calculate_s(x_s) * calculate_C(x_s)  # d dimensions the same as F(x)
 
 
 def local_optimization_func(x, z):
@@ -172,11 +257,16 @@ def local_optimization(x_s):
     return x_o
 
 
+# def first_order_optimization(x_o):
+#     A = get_A_mtx(x_o)
+#     b = get_b_mtx(x_o)
+#     y = get_y_mtx(A, b)
+#     return y[:d-1]
+
+
 def first_order_optimization(x_o):
-    A = get_A_mtx(x_o)
-    b = get_A_mtx(x_o)
-    y = get_y_mtx(A, b)
-    return y[:d-1]
+    alpha = minimize_g_alpha(x_o, f_func)  # TODO fix this
+    return run_homotopy(x_o, alpha, f_func, grad_f_func, grad2_f_func, D, 0, d)
 
 
 def update_buffer():
