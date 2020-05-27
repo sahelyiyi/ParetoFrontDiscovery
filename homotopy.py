@@ -58,7 +58,7 @@ def f2_func(x):
 
 def f_func(x):
     f1 = f1_func(x)
-    f2 = f2_func()
+    f2 = f2_func(x)
     return np.array([f1, f2])
 
 
