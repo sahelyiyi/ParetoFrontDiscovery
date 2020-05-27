@@ -29,7 +29,8 @@ def grad_a_func(x):
 def grad2_a_func(x):
     grad2_x1 = (2 * math.pi / 360) * A_1 * (2*math.pi)**2 * -math.sin(2*math.pi*x[0])
     grad2_x2 = (2 * math.pi / 360) * A_2 * (2*math.pi)**2 * -math.sin(2*math.pi*x[1])
-    return np.array([grad2_x1, grad2_x2])
+    grad2_x1_x2 = 0
+    return np.array([[grad2_x1, grad2_x1_x2], [grad2_x1_x2, grad2_x2]])
 
 
 def b_func(x):
@@ -43,17 +44,62 @@ def grad_b_func(x):
 
 
 def grad2_b_func(x):
-    grad_x1 = 0
-    grad_x2 = - D * (2*math.pi)**2 * math.cos(2*math.pi*x[1])
-    return np.array([grad_x1, grad_x2])
+    grad2_x1 = 0
+    grad2_x2 = - D * (2*math.pi)**2 * math.cos(2*math.pi*x[1])
+    grad2_x1_x2 = 0
+    return np.array([[grad2_x1, grad2_x1_x2], [grad2_x1_x2, grad2_x2]])
 
 
 def f1_func(x):
     return math.cos(a_func(x)) * b_func(x)
 
 
+def grad_f1_func(x):
+    a = a_func(x)
+    grad_a = grad_a_func(x)
+
+    b = b_func(x)
+    grad_b = grad_b_func(x)
+
+    return grad_a * -math.sin(a) * b + math.cos(a) * grad_b
+
+
+def grad2_f1_func(x):
+    a = a_func(x)
+    grad_a = grad_a_func(x)
+    grad2_a = grad2_a_func(x)
+
+    b = b_func(x)
+    grad_b = grad_b_func(x)
+    grad2_b = grad2_b_func(x)
+
+    return grad2_a * -math.sin(a) * b + grad_a * (grad_a * -math.cos(a) * b + 2 * -math.sin(a) * grad_b) + math.cos(a) * grad2_b
+
+
 def f2_func(x):
     return math.sin(a_func(x)) * b_func(x)
+
+
+def grad_f2_func(x):
+    a = a_func(x)
+    grad_a = grad_a_func(x)
+
+    b = b_func(x)
+    grad_b = grad_b_func(x)
+
+    return grad_a * math.cos(a) * b + math.sin(a) * grad_b
+
+
+def grad2_f2_func(x):
+    a = a_func(x)
+    grad_a = grad_a_func(x)
+    grad2_a = grad2_a_func(x)
+
+    b = b_func(x)
+    grad_b = grad_b_func(x)
+    grad2_b = grad2_b_func(x)
+
+    return grad2_a * math.cos(a) * b + grad_a * (grad_a * -math.sin(a) * b + 2 * math.cos(a) * grad_b) + math.sin(a) * grad2_b
 
 
 def f_func(x):
@@ -63,28 +109,14 @@ def f_func(x):
 
 
 def grad_f_func(x):
-    a = a_func(x)
-    grad_a = grad_a_func(x)
-
-    b = b_func(x)
-    grad_b = grad_b_func(x)
-
-    grad_f1 = grad_a * -math.sin(a) * b + math.cos(a) * grad_b
-    grad_f2 = grad_a * math.cos(a) * b + math.sin(a) * grad_b
+    grad_f1 = grad_f1_func(x)
+    grad_f2 = grad_f2_func(x)
     return np.array([grad_f1, grad_f2])
 
 
 def grad2_f_func(x):
-    a = a_func(x)
-    grad_a = grad_a_func(x)
-    grad2_a = grad2_a_func(x)
-
-    b = b_func(x)
-    grad_b = grad_b_func(x)
-    grad2_b = grad2_b_func(x)
-
-    grad2_f1 = grad2_a * -math.sin(a) * b + grad_a * (grad_a * -math.cos(a) * b + 2 * -math.sin(a) * grad_b) + math.cos(a) * grad2_b
-    grad2_f2 = grad2_a * math.cos(a) * b + grad_a * (grad_a * -math.sin(a) * b + 2 * math.cos(a) * grad_b) + math.sin(a) * grad2_b
+    grad2_f1 = grad2_f1_func(x)
+    grad2_f2 = grad2_f2_func(x)
     return np.array([grad2_f1, grad2_f2])
 
 
@@ -110,7 +142,8 @@ def F_func(x, alpha, _grad_f_func):
 
 def hessian_of_the_lagrangian_func(x, alpha, _grad2_f_func):
     grad2_f = _grad2_f_func(x)
-    return np.array([alpha[i] * grad2_f[i] for i in range(len(alpha))])
+    res = np.array([alpha[i] * grad2_f[i] for i in range(len(alpha))])
+    return np.sum(res, axis=0)
 
 
 def F_jacobian_func(x, alpha, _grad_f_func, _grad2_f_func):
@@ -143,17 +176,21 @@ def grad_F_tilda_func(Q, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m):
 
 def newton_system(f, Df, Q, eta_0, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m, error=1e-1, max_iter=1000):  # TODO fix epsilon and max_iter
     eta_n = eta_0
-    F_value = f(Q, epsilon, eta_n, x_star, alpha_star, _grad_f_func, n)
-    F_norm = np.linalg.norm(F_value, ord=2)  # l2 norm of vector
+    f_value = f(Q, epsilon, eta_n, x_star, alpha_star, _grad_f_func, n)
+    f_norm = np.linalg.norm(f_value, ord=2)  # l2 norm of vector
     iteration_counter = 0
-    while abs(F_norm) > error and iteration_counter < max_iter:
-        delta = np.linalg.solve(Df(Q, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m), -F_value)
+    while abs(f_norm) > error and iteration_counter < max_iter:
+        df_value = Df(Q, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m)
+        try:
+            delta = np.linalg.solve(df_value, -f_value)
+        except:  # TODO fix this
+            delta = 0.0001
         eta_n = eta_n + delta
-        F_value = f(Q, epsilon, eta_n, x_star, alpha_star, _grad_f_func, n)
-        F_norm = np.linalg.norm(F_value, ord=2)
+        f_value = f(Q, epsilon, eta_n, x_star, alpha_star, _grad_f_func, n)
+        f_norm = np.linalg.norm(f_value, ord=2)
         iteration_counter += 1
 
-    if abs(F_norm) > error:
+    if abs(f_norm) > error:
         iteration_counter = -1
     return eta_n, iteration_counter
 
@@ -210,7 +247,7 @@ def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k):
             phi_alpha = phi_func(Q, epsilon_i, newton_eta, x, alpha)[n:]
             check_phi_alpha = False if len(phi_alpha[phi_alpha <= 0]) else True
 
-        result_points.append(phi_func(Q, epsilon_i, newton_eta, x, alpha))
+        result_points.append(phi_func(Q, epsilon_i, newton_eta, x, alpha)[:n])
 
     return np.array(result_points)
 

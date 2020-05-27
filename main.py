@@ -2,11 +2,14 @@ import random
 import math
 import numpy as np
 from scipy.optimize import minimize
+from collections import defaultdict
 
 from homotopy import run_homotopy
 from utils import get_uniform_random_unit_vector
 
 N_S = 10  # buffer size
+N_i = 10  # update size
+N_t = 10  # average update size
 K = 50
 LAMBDA_P = 10
 LAMBDA_S = 0.3
@@ -19,7 +22,7 @@ d = 2  # dimension of F
 
 BOUNDS = np.c_[np.full(D, 0), np.full(D, 1)]
 
-B = []  # [{x, F(x), A}]
+B = [defaultdict(list) for i in range(N_S)]  # [{|x|: [{x, F(x), A}]}]
 
 # X = [0, 1]^D is the design space
 
@@ -50,7 +53,8 @@ def grad_p_func(x):
 
 
 def grad2_p_func(x):
-    return np.zeros(x.shape)
+    # return np.zeros((x.shape[0], x.shape[0]))
+    return np.random.rand(x.shape[0], x.shape[0])
 
 
 def f1_func(x):
@@ -64,7 +68,8 @@ def grad_f1_func(x):
 
 
 def grad2_f1_func(x):
-    return np.zeros((x.shape))
+    # return np.zeros((x.shape[0], x.shape[0]))
+    return np.random.rand(x.shape[0], x.shape[0])
 
 
 def grad_pf1_func(x):
@@ -92,7 +97,8 @@ def grad_pf1sqrt(x):
     f1 = f1_func(x)
     p = p_func(x)
 
-    return grad_pf1_func(x) / (2 * math.sqrt(p * f1))
+    # return grad_pf1_func(x) / (2 * math.sqrt(p * f1))
+    return grad_pf1_func(x) / (2 * math.sqrt(abs(p * f1)))  # TODO fix this
 
 
 def grad2_pf1sqrt(x):
@@ -119,6 +125,8 @@ def grad2_f2_func(x):
 
 
 def ZDT1(x):
+    if x.shape[0] != D:
+        raise Exception('invalid shape of x.')
     f1 = f1_func(x)  # objective 1
     f2 = f2_func(x)  # objective 2
     # f2 /= 10.0  # to scale the F
@@ -201,8 +209,7 @@ def get_y_mtx(A, b):
 
 def _select_min_sample(buffer_cell):
     min_dist = min(buffer_cell)
-    min_xs = buffer_cell[min_dist]
-    x_j = random.choice(min_xs)['x']
+    x_j = random.choice(buffer_cell[min_dist])['x']
 
     return x_j
 
@@ -269,13 +276,36 @@ def first_order_optimization(x_o):
     return run_homotopy(x_o, alpha, f_func, grad_f_func, grad2_f_func, D, 0, d)
 
 
-def update_buffer():
-    pass
+def update_buffer(buffer_cell, x, A_i):
+    x_dist = np.linalg.norm(x)
+
+    if not len(buffer_cell.keys()):
+        buffer_cell[x_dist].append({'x': x, 'A': A_i})
+        return buffer_cell, True
+
+    max_dist = max(buffer_cell)
+    if x_dist > max_dist:
+        return buffer_cell, False
+
+    buffer_cell[x_dist].append({'x': x, 'A': A_i})
+    buffer_cell[max_dist] = buffer_cell[max_dist][:-1]
+    return buffer_cell, True
 
 
 def main():
+    non_updated_cnt = 0
     while True:
+        if non_updated_cnt == N_i:
+            break
         xs = stochastic_sampling(B)
-        for x_s in xs:
+        for i, x_s in enumerate(xs):
             x_o = local_optimization(x_s)
-            M = first_order_optimization(x_o)  # it should be D*d-1 matrix
+            M_i = first_order_optimization(x_o)  # it should be D*d-1 matrix
+            A_i = []
+            for neighbour in M_i:
+                A_i.append(f_func(neighbour))
+            B[i], updated = update_buffer(B[i], x_s, A_i)  # TODO check x_o
+            if updated:
+                non_updated_cnt = 0
+            else:
+                non_updated_cnt += 1
