@@ -4,23 +4,11 @@ import numpy as np
 from scipy.optimize import minimize
 from collections import defaultdict
 
+from ZDT1 import f_func, grad_f_func, grad2_f_func
+from constants import N_S, N_i, LAMBDA_P, LAMBDA_S, D, d, K
 from homotopy import run_homotopy
 from utils import get_uniform_random_unit_vector
 
-N_S = 10  # buffer size
-N_i = 10  # update size
-N_t = 10  # average update size
-K = 50
-LAMBDA_P = 10
-LAMBDA_S = 0.3
-LAMBDA_B = 1e-2
-LAMBDA_I = 1e-4
-LAMBDA_N = 0.2 * N_S
-
-D = 3  # dimension of X
-d = 2  # dimension of F
-
-BOUNDS = np.c_[np.full(D, 0), np.full(D, 1)]
 
 B = [defaultdict(list) for i in range(N_S)]  # [{|x|: [{x, F(x), A}]}]
 
@@ -38,116 +26,6 @@ def grad_constraints_func(x):
     g1_grad = np.full((x.shape), -1)
     g2_grad = np.full((x.shape), 1)
     return g1_grad, g2_grad
-
-
-def p_func(x):
-    shape = x.shape[0]
-    return 1 + 9 * np.sum(x[1:shape] / (shape - 1))
-
-
-def grad_p_func(x):
-    shape = x.shape[0]
-    grad_p = np.full((shape), 9 / (shape - 1))
-    grad_p[0] = 0
-    return grad_p
-
-
-def grad2_p_func(x):
-    # return np.zeros((x.shape[0], x.shape[0]))
-    return np.random.rand(x.shape[0], x.shape[0])
-
-
-def f1_func(x):
-    return x[0]
-
-
-def grad_f1_func(x):
-    grad_f1 = np.zeros((x.shape))
-    grad_f1[0] = 1
-    return grad_f1
-
-
-def grad2_f1_func(x):
-    # return np.zeros((x.shape[0], x.shape[0]))
-    return np.random.rand(x.shape[0], x.shape[0])
-
-
-def grad_pf1_func(x):
-    f1 = f1_func(x)
-    grad_f1 = grad_f1_func(x)
-
-    p = p_func(x)
-    grad_p = grad_p_func(x)
-
-    return grad_p * f1 + grad_f1 * p
-
-
-def grad2_pf1_func(x):
-    f1 = f1_func(x)
-    grad_f1 = grad_f1_func(x)
-    grad2_f1 = grad2_f1_func(x)
-
-    p = p_func(x)
-    grad_p = grad_p_func(x)
-    grad2_p = grad2_p_func(x)
-    return grad2_p * f1 + 2 * grad_p * grad_f1 + grad2_f1 * p
-
-
-def grad_pf1sqrt(x):
-    f1 = f1_func(x)
-    p = p_func(x)
-
-    # return grad_pf1_func(x) / (2 * math.sqrt(p * f1))
-    return grad_pf1_func(x) / (2 * math.sqrt(abs(p * f1)))  # TODO fix this
-
-
-def grad2_pf1sqrt(x):
-    f1 = f1_func(x)
-    p = p_func(x)
-
-    return (grad2_pf1_func(x) * math.sqrt(p * f1) - grad_pf1_func(x) * grad_pf1sqrt(x)) / (2 * p * f1)
-
-
-def f2_func(x):
-    f1 = f1_func(x)
-    p = p_func(x)
-    q = 1 - np.sqrt(f1 / p)
-    f2 = p * q
-    return f2
-
-
-def grad_f2_func(x):
-    return grad_p_func(x) + grad_pf1sqrt(x)
-
-
-def grad2_f2_func(x):
-    return grad2_p_func(x) + grad2_pf1sqrt(x)
-
-
-def ZDT1(x):
-    if x.shape[0] != D:
-        raise Exception('invalid shape of x.')
-    f1 = f1_func(x)  # objective 1
-    f2 = f2_func(x)  # objective 2
-    # f2 /= 10.0  # to scale the F
-
-    return np.array([f1, f2])
-
-
-def f_func(x):
-    return ZDT1(x)
-
-
-def grad_f_func(x):
-    grad_f1 = grad_f1_func(x)
-    grad_f2 = grad_f2_func(x)
-    return np.array([grad_f1, grad_f2])
-
-
-def grad2_f_func(x):
-    grad2_f1 = grad2_f1_func(x)
-    grad2_f2 = grad2_f2_func(x)
-    return np.array([grad2_f1, grad2_f2])
 
 
 def g_alpha_func(alpha, x, _f_func):
@@ -248,11 +126,12 @@ def calculate_z(x_s):
 
 
 def local_optimization_func(x, z):
-    return np.linalg.norm(ZDT1(x) - z)
+    return np.linalg.norm(f_func(x) - z)
 
 
 def get_x_o(x_s, z):
-    sol = minimize(local_optimization_func, x_s, args=(z), bounds=BOUNDS, method='SLSQP')
+    bounds = np.c_[np.full(D, 0), np.full(D, 1)]
+    sol = minimize(local_optimization_func, x_s, args=(z), bounds=bounds, method='SLSQP')
     if not sol.success:
         raise RuntimeError("Failed to solve")
     return sol.x
@@ -279,7 +158,10 @@ def first_order_optimization(x_o):
 def update_buffer(buffer_cell, x, A_i):
     x_dist = np.linalg.norm(x)
 
-    if not len(buffer_cell.keys()):
+    size = 0
+    for key in buffer_cell:
+        size += len(buffer_cell[key])
+    if size < K:
         buffer_cell[x_dist].append({'x': x, 'A': A_i})
         return buffer_cell, True
 
