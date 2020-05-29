@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from ZDT1 import f_func, grad_f_func, grad2_f_func
 from constants import N_S, N_i, LAMBDA_P, LAMBDA_S, D, d, K
-from homotopy import run_homotopy
+from homotopy.algorithm import run_homotopy
 from utils import get_uniform_random_unit_vector
 
 

@@ -1,123 +1,16 @@
 import math
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
+from homotopy.numerical_result_1 import f_func, grad_f_func, grad2_f_func
 from utils import get_uniform_positive_random_unit_vector
 from QR_factorization import qr_factorization
 
 
-A_C = 45
-A_1 = 40
-A_2 = 25
-D = 0.5
-
 N = 2
 M = 0
 K = 2
-
-
-def a_func(x):
-    return (2 * math.pi / 360) * (A_C + A_1 * math.sin(2*math.pi*x[0]) + A_2 * math.sin(2*math.pi*x[1]))
-
-
-def grad_a_func(x):
-    grad_x1 = (2 * math.pi / 360) * A_1 * 2*math.pi * math.cos(2*math.pi*x[0])
-    grad_x2 = (2 * math.pi / 360) * A_2 * 2*math.pi * math.cos(2*math.pi*x[1])
-    return np.array([grad_x1, grad_x2])
-
-
-def grad2_a_func(x):
-    grad2_x1 = (2 * math.pi / 360) * A_1 * (2*math.pi)**2 * -math.sin(2*math.pi*x[0])
-    grad2_x2 = (2 * math.pi / 360) * A_2 * (2*math.pi)**2 * -math.sin(2*math.pi*x[1])
-    grad2_x1_x2 = 0
-    return np.array([[grad2_x1, grad2_x1_x2], [grad2_x1_x2, grad2_x2]])
-
-
-def b_func(x):
-    return 1 + D * math.cos(2*math.pi*x[1])
-
-
-def grad_b_func(x):
-    grad_x1 = 0
-    grad_x2 = - D * 2*math.pi * math.sin(2*math.pi*x[1])
-    return np.array([grad_x1, grad_x2])
-
-
-def grad2_b_func(x):
-    grad2_x1 = 0
-    grad2_x2 = - D * (2*math.pi)**2 * math.cos(2*math.pi*x[1])
-    grad2_x1_x2 = 0
-    return np.array([[grad2_x1, grad2_x1_x2], [grad2_x1_x2, grad2_x2]])
-
-
-def f1_func(x):
-    return math.cos(a_func(x)) * b_func(x)
-
-
-def grad_f1_func(x):
-    a = a_func(x)
-    grad_a = grad_a_func(x)
-
-    b = b_func(x)
-    grad_b = grad_b_func(x)
-
-    return grad_a * -math.sin(a) * b + math.cos(a) * grad_b
-
-
-def grad2_f1_func(x):
-    a = a_func(x)
-    grad_a = grad_a_func(x)
-    grad2_a = grad2_a_func(x)
-
-    b = b_func(x)
-    grad_b = grad_b_func(x)
-    grad2_b = grad2_b_func(x)
-
-    return grad2_a * -math.sin(a) * b + grad_a * (grad_a * -math.cos(a) * b + 2 * -math.sin(a) * grad_b) + math.cos(a) * grad2_b
-
-
-def f2_func(x):
-    return math.sin(a_func(x)) * b_func(x)
-
-
-def grad_f2_func(x):
-    a = a_func(x)
-    grad_a = grad_a_func(x)
-
-    b = b_func(x)
-    grad_b = grad_b_func(x)
-
-    return grad_a * math.cos(a) * b + math.sin(a) * grad_b
-
-
-def grad2_f2_func(x):
-    a = a_func(x)
-    grad_a = grad_a_func(x)
-    grad2_a = grad2_a_func(x)
-
-    b = b_func(x)
-    grad_b = grad_b_func(x)
-    grad2_b = grad2_b_func(x)
-
-    return grad2_a * math.cos(a) * b + grad_a * (grad_a * -math.sin(a) * b + 2 * math.cos(a) * grad_b) + math.sin(a) * grad2_b
-
-
-def f_func(x):
-    f1 = f1_func(x)
-    f2 = f2_func(x)
-    return np.array([f1, f2])
-
-
-def grad_f_func(x):
-    grad_f1 = grad_f1_func(x)
-    grad_f2 = grad_f2_func(x)
-    return np.array([grad_f1, grad_f2])
-
-
-def grad2_f_func(x):
-    grad2_f1 = grad2_f1_func(x)
-    grad2_f2 = grad2_f2_func(x)
-    return np.array([grad2_f1, grad2_f2])
 
 
 def g_alpha_func(x, alpha, _f_func):
@@ -174,24 +67,46 @@ def grad_F_tilda_func(Q, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m):
     return res[:, -(n+m+1):]
 
 
-def newton_system(f, Df, Q, eta_0, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m, error=1e-1, max_iter=1000):  # TODO fix epsilon and max_iter
+def plot_steps_chart(xs, x_star):
+    X = []
+    Y = []
+    for item in xs:
+        f1, f2 = f_func(item)
+        X.append(f1)
+        Y.append(f2)
+
+    plt.plot(X, Y, 'bo')
+    f1, f2 = f_func(x_star)
+    X = [f1]
+    Y = [f2]
+    plt.plot(X, Y, 'ro')
+    plt.axis([-0.5, 1.5, -0.5, 1.5])
+    plt.savefig('candidate_set.jpg')
+
+
+def newton_system(f, Df, Q, eta_0, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m, plot=False, error=1e-1, max_iter=1000):  # TODO fix epsilon and max_iter
     eta_n = eta_0
     f_value = f(Q, epsilon, eta_n, x_star, alpha_star, _grad_f_func, n)
     f_norm = np.linalg.norm(f_value, ord=2)  # l2 norm of vector
     iteration_counter = 0
+
+    xs = []
+
     while abs(f_norm) > error and iteration_counter < max_iter:
         df_value = Df(Q, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m)
-        try:
-            delta = np.linalg.solve(df_value, -f_value)
-        except:  # TODO fix this
-            delta = 0.0001
+        delta = np.linalg.solve(df_value, -f_value)
         eta_n = eta_n + delta
         f_value = f(Q, epsilon, eta_n, x_star, alpha_star, _grad_f_func, n)
         f_norm = np.linalg.norm(f_value, ord=2)
+
+        xs.append(phi_func(Q, epsilon, eta_n, x_star, alpha_star)[:n])
+
         iteration_counter += 1
 
     if abs(f_norm) > error:
         iteration_counter = -1
+    elif plot:
+        plot_steps_chart(xs, x_star)
     return eta_n, iteration_counter
 
 
@@ -231,6 +146,7 @@ def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k):
     # Step 7
     result_points = []
     for epsilon_i in epsilons:
+        # epsilon_i = np.array([0.06])
 
         # Step 10
         check_phi_alpha = False
