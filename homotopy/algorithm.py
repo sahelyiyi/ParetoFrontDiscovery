@@ -81,7 +81,7 @@ def plot_steps_chart(xs, x_star):
     Y = [f2]
     plt.plot(X, Y, 'ro')
     plt.axis([-0.5, 1.5, -0.5, 1.5])
-    plt.savefig('candidate_set.jpg')
+    plt.savefig('results/candidate_set.jpg')
 
 
 def newton_system(f, Df, Q, eta_0, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m, plot=False, error=1e-1, max_iter=1000):  # TODO fix epsilon and max_iter
