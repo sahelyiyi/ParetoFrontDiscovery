@@ -81,7 +81,7 @@ def plot_steps_chart(xs, x_star):
     Y = [f2]
     plt.plot(X, Y, 'ro')
     plt.axis([-0.5, 1.5, -0.5, 1.5])
-    plt.savefig('results/candidate_set.jpg')
+    plt.savefig('homotopy/results/candidate_set.jpg')
 
 
 def newton_system(f, Df, Q, eta_0, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m, plot=False, error=1e-1, max_iter=1000):  # TODO fix epsilon and max_iter
@@ -110,7 +110,7 @@ def newton_system(f, Df, Q, eta_0, epsilon, x_star, alpha_star, _grad_f_func, _g
     return eta_n, iteration_counter
 
 
-def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k):
+def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=False):
     # Step 2
     F_jacobian = F_jacobian_func(x, alpha, _grad_f_func, _grad2_f_func)
 
@@ -133,7 +133,7 @@ def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k):
 
     # Step 6
     I_size = k-1
-    c = 1.0  # TODO check this
+    c = 0.02  # TODO check this
     epsilons = []
     for i in range(I_size):
         e_i = np.zeros(I_size)
@@ -146,7 +146,6 @@ def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k):
     # Step 7
     result_points = []
     for epsilon_i in epsilons:
-        # epsilon_i = np.array([0.06])
 
         # Step 10
         check_phi_alpha = False
@@ -157,7 +156,7 @@ def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k):
 
                 # Step 8
                 eta_i = np.zeros(n+m+1)  # TODO check starting point
-                newton_eta, newton_iter = newton_system(F_tilda_func, grad_F_tilda_func, Q, eta_i, epsilon_i, x, alpha, _grad_f_func, _grad2_f_func, n, m)
+                newton_eta, newton_iter = newton_system(F_tilda_func, grad_F_tilda_func, Q, eta_i, epsilon_i, x, alpha, _grad_f_func, _grad2_f_func, n, m, plot=plot)
                 epsilon_i /= 2
 
             phi_alpha = phi_func(Q, epsilon_i, newton_eta, x, alpha)[n:]
@@ -171,7 +170,10 @@ def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k):
 def run(_f_func=f_func, _grad_f_func=grad_f_func, _grad2_f_func=grad2_f_func, n=N, m=M, k=K):
     # Step 1
     alpha = get_uniform_positive_random_unit_vector(k)
-    x = minimize_g_alpha(alpha, _f_func, n)
+    # alpha = np.array([0.5, 0.5])
+    x = minimize_g_alpha(alpha, _f_func, n)  # 1st point
+    # x = np.array([0.75, 0.6])  # 2nd point
+    # x = np.array([0.5, 0.5])  # 3rd point
     # print('F(x, alpha) should be 0\n', F_func(x, alpha, _grad_f_func))
 
-    return run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k)
+    return run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=False)
