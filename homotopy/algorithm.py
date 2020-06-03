@@ -1,6 +1,5 @@
 import math
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
 from homotopy.numerical_result_1 import f_func, grad_f_func, grad2_f_func
@@ -68,6 +67,8 @@ def grad_F_tilda_func(Q, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m):
 
 
 def plot_steps_chart(xs, x_star):
+    import matplotlib.pyplot as plt
+
     X = []
     Y = []
     for item in xs:
@@ -139,7 +140,7 @@ def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=F
         e_i = np.zeros(I_size)
         e_i[i] = 1
         q_i_bar = Q[:n, i]
-        lambda_i = c / np.linalg.norm(_grad_f_func(x) * q_i_bar)
+        lambda_i = c / np.linalg.norm(np.dot(_grad_f_func(x), q_i_bar))
         epsilon_i = lambda_i * e_i
         epsilons.append(epsilon_i)
 
