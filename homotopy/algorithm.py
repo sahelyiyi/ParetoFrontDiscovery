@@ -77,6 +77,7 @@ def plot_steps_chart(xs, x_star):
         Y.append(f2)
 
     plt.plot(X, Y, 'bo')
+    plt.plot(X[-1:], Y[-1:], 'yo')
     f1, f2 = f_func(x_star)
     X = [f1]
     Y = [f2]
