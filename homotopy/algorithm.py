@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import minimize, newton
 
 from homotopy.numerical_result_1 import f_func, grad_f_func, grad2_f_func
 from utils import get_uniform_positive_random_unit_vector
@@ -54,19 +54,19 @@ def phi_func(Q, epsilon, eta, x_star, alpha_star):
     return res
 
 
-def F_tilda_func(Q, epsilon, eta, x_star, alpha_star, _grad_f_func, n):
+def F_tilda_func(eta, Q, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m):
     res = phi_func(Q, epsilon, eta, x_star, alpha_star)
     x = res[:n]
     alpha = res[n:]
     return F_func(x, alpha, _grad_f_func)
 
 
-def grad_F_tilda_func(Q, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m):
+def grad_F_tilda_func(eta, Q, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m):
     res = np.dot(F_jacobian_func(x_star, alpha_star, _grad_f_func, _grad2_f_func).T, Q)
     return res[:, -(n+m+1):]
 
 
-def plot_steps_chart(xs, x_star):
+def plot_steps_chart(xs, x_star, suffix=''):
     import matplotlib.pyplot as plt
 
     X = []
@@ -82,37 +82,39 @@ def plot_steps_chart(xs, x_star):
     X = [f1]
     Y = [f2]
     plt.plot(X, Y, 'ro')
-    plt.axis([-0.5, 1.5, -0.5, 1.5])
-    plt.savefig('homotopy/results/candidate_set.jpg')
+    plt.axis([-0.5, 1.6, -0.5, 1.6])
+    plt.savefig('homotopy/results/candidate_set%s.jpg' % suffix)
+    plt.clf()
 
 
-def newton_system(f, Df, Q, eta_0, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m, plot=False, error=1e-1, max_iter=1000):  # TODO fix epsilon and max_iter
+def newton_system(f, Df, Q, eta_0, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m, error, plot=False, suffix='', max_iter=1000):  # TODO fix error and max_iter
     eta_n = eta_0
-    f_value = f(Q, epsilon, eta_n, x_star, alpha_star, _grad_f_func, n)
+    f_value = f(eta_n, Q, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m)
     f_norm = np.linalg.norm(f_value, ord=2)  # l2 norm of vector
     iteration_counter = 0
 
-    xs = []
+    xs = [x_star]
 
     while abs(f_norm) > error and iteration_counter < max_iter:
-        df_value = Df(Q, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m)
+        df_value = Df(eta_n, Q, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m)
         delta = np.linalg.solve(df_value, -f_value)
         eta_n = eta_n + delta
-        f_value = f(Q, epsilon, eta_n, x_star, alpha_star, _grad_f_func, n)
+        f_value = f(eta_n, Q, epsilon, x_star, alpha_star, _grad_f_func, _grad2_f_func, n, m)
         f_norm = np.linalg.norm(f_value, ord=2)
 
-        xs.append(phi_func(Q, epsilon, eta_n, x_star, alpha_star)[:n])
+        phi = phi_func(Q, epsilon, eta_n, x_star, alpha_star)
+        xs.append(phi[:n])
 
         iteration_counter += 1
 
     if abs(f_norm) > error:
         iteration_counter = -1
     elif plot:
-        plot_steps_chart(xs, x_star)
+        plot_steps_chart(xs, x_star, suffix)
     return eta_n, iteration_counter
 
 
-def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=False):
+def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=False, suffix='', error=1e-1):
     # Step 2
     F_jacobian = F_jacobian_func(x, alpha, _grad_f_func, _grad2_f_func)
 
@@ -158,7 +160,7 @@ def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=F
 
                 # Step 8
                 eta_i = np.zeros(n+m+1)  # TODO check starting point
-                newton_eta, newton_iter = newton_system(F_tilda_func, grad_F_tilda_func, Q, eta_i, epsilon_i, x, alpha, _grad_f_func, _grad2_f_func, n, m, plot=plot)
+                newton_eta, newton_iter = newton_system(F_tilda_func, grad_F_tilda_func, Q, eta_i, epsilon_i, x, alpha, _grad_f_func, _grad2_f_func, n, m, error=error, plot=plot, suffix=suffix)
                 epsilon_i /= 2
 
             phi_alpha = phi_func(Q, epsilon_i, newton_eta, x, alpha)[n:]
@@ -171,11 +173,23 @@ def run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=F
 
 def run(_f_func=f_func, _grad_f_func=grad_f_func, _grad2_f_func=grad2_f_func, n=N, m=M, k=K):
     # Step 1
-    alpha = get_uniform_positive_random_unit_vector(k)
-    # alpha = np.array([0.5, 0.5])
+    # alpha = get_uniform_positive_random_unit_vector(k)
+    alpha = np.array([0.5, 0.5])
     x = minimize_g_alpha(alpha, _f_func, n)  # 1st point
-    # x = np.array([0.75, 0.6])  # 2nd point
-    # x = np.array([0.5, 0.5])  # 3rd point
-    # print('F(x, alpha) should be 0\n', F_func(x, alpha, _grad_f_func))
+    print('first x:', x, ', alpha:', alpha)
+    print('F(x, alpha) should be 0, F:', F_func(x, alpha, _grad_f_func))
+    print('best x for error=1e-1: ', run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=True, suffix='_1'))
+    print()
 
-    return run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=False)
+    x = np.array([0.75, 0.6])  # 2nd point
+    print('second x:', x, ', alpha:', alpha)
+    print('F(x, alpha) should be 0, F:', F_func(x, alpha, _grad_f_func))
+    print('best x for error=1e-1: ', run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=True, suffix='_2'))
+    print()
+
+    x = np.array([0.5, 0.5])  # 3rd point
+    print('third x:', x, ', alpha:', alpha)
+    print('F(x, alpha) should be 0, F:', F_func(x, alpha, _grad_f_func))
+    print('best x for error=1e-1: ', run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=True, suffix='_3'))
+    print('best x for error=1e-2: ', run_homotopy(x, alpha, _f_func, _grad_f_func, _grad2_f_func, n, m, k, plot=True, suffix='_3_error', error=1e-2))
+    print()
